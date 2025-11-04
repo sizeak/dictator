@@ -1,0 +1,19 @@
+[Unit]
+Description=Dictator Voice Transcription Daemon
+Documentation=https://github.com/sizeak/dictator
+After=network.target sound.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/dictator
+Restart=on-failure
+RestartSec=5
+
+# Environment
+Environment=RUST_LOG=info
+
+# Resource limits
+Nice=-5
+
+[Install]
+WantedBy=default.target

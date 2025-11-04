@@ -1,0 +1,17 @@
+{
+  "api_url": "http://localhost:8000/v1",
+  "api_key": "your-api-key-here",
+  "model": "Systran/faster-distil-whisper-large-v3",
+  "primary_shortcut": "SUPER+ALT+D",
+  "paste_mode": "ctrl_shift",
+  "audio_feedback": true,
+  "start_sound_path": "/usr/share/sounds/freedesktop/stereo/message.oga",
+  "stop_sound_path": "/usr/share/sounds/freedesktop/stereo/complete.oga",
+  "language": "en",
+  "whisper_prompt": "",
+  "word_overrides": {
+    "open ai": "OpenAI",
+    "rust": "Rust",
+    "python": "Python"
+  }
+}
