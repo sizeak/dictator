@@ -4,6 +4,7 @@ mod config;
 mod messages;
 mod services;
 mod shortcuts;
+mod text_injection;
 mod text_processing;
 mod transcription;
 
@@ -146,9 +147,12 @@ async fn handle_toggle(
                     .await?;
             tracing::info!("Transcription: {}", text);
 
-            // Inject text
+            // Process and inject text
+            tracing::info!("Processing text...");
+            let processed_text = text_processor.process(&text);
+
             tracing::info!("Injecting text...");
-            text_processing::inject_text(text, text_processor, &config.paste_mode).await?;
+            text_injection::inject_text(processed_text, &config.paste_mode).await?;
 
             tracing::info!("Complete!");
             state.send(AppState::Idle)?;
