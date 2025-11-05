@@ -62,7 +62,7 @@ fn default_model() -> String {
 }
 
 fn default_paste_mode() -> String {
-    "super".to_string()
+    "ctrl_shift".to_string()
 }
 
 fn default_audio_feedback() -> bool {
@@ -140,8 +140,7 @@ impl Config {
                 .with_context(|| format!("Failed to create config directory: {:?}", parent))?;
         }
 
-        let contents = serde_json::to_string_pretty(self)
-            .context("Failed to serialize config")?;
+        let contents = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
 
         std::fs::write(&config_path, contents)
             .with_context(|| format!("Failed to write config file: {:?}", config_path))?;
