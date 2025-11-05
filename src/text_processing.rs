@@ -29,7 +29,6 @@ impl TextProcessor {
             })
             .collect();
 
-        // Punctuation commands from Python implementation
         let punctuation = vec![
             (Regex::new(r"\bperiod\b").unwrap(), "."),
             (Regex::new(r"\bcomma\b").unwrap(), ","),
@@ -100,11 +99,7 @@ impl TextProcessor {
 /// - Processes the text through the TextProcessor
 /// - Copies it to clipboard via wl-copy
 /// - Triggers paste via ydotool
-pub async fn inject_text(
-    text: String,
-    processor: &TextProcessor,
-    paste_mode: &str,
-) -> Result<()> {
+pub async fn inject_text(text: String, processor: &TextProcessor, paste_mode: &str) -> Result<()> {
     tracing::info!("Injecting text: {} chars", text.len());
 
     // Process text (word overrides + punctuation commands)
@@ -133,9 +128,9 @@ pub async fn inject_text(
 
         // Trigger paste via ydotool
         let keycodes = match paste_mode.as_str() {
-            "super" => "125:1 47:1 47:0 125:0",                     // Super+V
-            "ctrl_shift" => "29:1 42:1 47:1 47:0 42:0 29:0",        // Ctrl+Shift+V
-            _ => "29:1 47:1 47:0 29:0",                             // Ctrl+V
+            "super" => "125:1 47:1 47:0 125:0",              // Super+V
+            "ctrl_shift" => "29:1 42:1 47:1 47:0 42:0 29:0", // Ctrl+Shift+V
+            _ => "29:1 47:1 47:0 29:0",                      // Ctrl+V
         };
 
         Command::new("ydotool")
@@ -171,14 +166,17 @@ mod tests {
     #[test]
     fn test_word_overrides() {
         let mut overrides = HashMap::new();
-        overrides.insert("hyperwhisper".to_string(), "hyprwhspr".to_string());
+        overrides.insert("dictator".to_string(), "dctr".to_string());
 
         let processor = TextProcessor::new(overrides);
 
-        assert_eq!(processor.process("hyperwhisper is cool"), "hyprwhspr is cool");
         assert_eq!(
-            processor.process("HyperWhisper is cool"),
-            "hyprwhspr is cool"
+            processor.process("dictator is cool"),
+            "dctr is cool"
+        );
+        assert_eq!(
+            processor.process("Dictator is cool"),
+            "dctr is cool"
         ); // Case insensitive
     }
 
