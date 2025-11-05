@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
+use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::{AudioResponseFormat, CreateTranscriptionRequestArgs};
-use async_openai::Client;
 use std::path::{Path, PathBuf};
 
 /// Configuration for transcription
@@ -55,7 +55,6 @@ async fn transcribe_file(
         .prompt(&config.prompt)
         .language(&config.language)
         .response_format(AudioResponseFormat::Json)
-        .temperature(0.0)
         .build()
         .context("Failed to build transcription request")?;
 
