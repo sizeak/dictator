@@ -70,11 +70,11 @@ fn default_audio_feedback() -> bool {
 }
 
 fn default_start_sound() -> String {
-    "ping-up.opus".to_string()
+    "ping-up.ogg".to_string()
 }
 
 fn default_stop_sound() -> String {
-    "ping-down.opus".to_string()
+    "ping-down.ogg".to_string()
 }
 
 fn default_timeout() -> u64 {
