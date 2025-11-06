@@ -130,12 +130,12 @@ async fn handle_toggle(
             tracing::info!("Stopping recording");
             state.send(AppState::Processing)?;
 
+            let temp_file = recorder.stop().await?;
+            tracing::info!("Recording saved to: {:?}", temp_file.path());
+
             if config.audio_feedback {
                 audio_feedback::play_sound(&config.stop_sound_path).await;
             }
-
-            let temp_file = recorder.stop().await?;
-            tracing::info!("Recording saved to: {:?}", temp_file.path());
 
             tracing::info!("Transcribing...");
             let text =
