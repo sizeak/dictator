@@ -113,7 +113,6 @@ async fn handle_toggle(
 
     match current_state {
         AppState::Idle => {
-            // Start recording
             tracing::info!("Starting recording");
             tracing::debug!("handle_toggle: changing state to Recording");
             state.send(AppState::Recording)?;
@@ -128,7 +127,6 @@ async fn handle_toggle(
         }
 
         AppState::Recording => {
-            // Stop recording and process
             tracing::info!("Stopping recording");
             state.send(AppState::Processing)?;
 
@@ -136,18 +134,15 @@ async fn handle_toggle(
                 audio_feedback::play_stop_sound(&config.stop_sound_path).await;
             }
 
-            // Stop recording (returns path to WAV file)
-            let wav_path = recorder.stop().await?;
-            tracing::info!("Recording saved to: {:?}", wav_path);
+            let temp_file = recorder.stop().await?;
+            tracing::info!("Recording saved to: {:?}", temp_file.path());
 
-            // Transcribe
             tracing::info!("Transcribing...");
             let text =
-                transcription::transcribe(wav_path, transcription_client, transcription_config)
+                transcription::transcribe(temp_file.path(), transcription_client, transcription_config)
                     .await?;
             tracing::info!("Transcription: {}", text);
 
-            // Process and inject text
             tracing::info!("Processing text...");
             let processed_text = text_processor.process(&text);
 
@@ -159,7 +154,6 @@ async fn handle_toggle(
         }
 
         AppState::Processing => {
-            // Ignore - already processing
             tracing::debug!("Already processing, ignoring toggle");
         }
     }

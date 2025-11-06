@@ -1,11 +1,11 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use tempfile::NamedTempFile;
 use tokio::sync::oneshot;
 
 /// Commands for the Recorder service
 pub enum RecorderCommand {
     Start,
-    Stop(oneshot::Sender<Result<PathBuf>>),
+    Stop(oneshot::Sender<Result<NamedTempFile>>),
 }
 
 /// Application state (observable via watch channel)

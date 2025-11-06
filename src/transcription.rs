@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::{AudioResponseFormat, CreateTranscriptionRequestArgs};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Configuration for transcription
 pub struct TranscriptionConfig {
@@ -20,37 +20,15 @@ pub fn create_client(api_url: String, api_key: String) -> Client<OpenAIConfig> {
     Client::with_config(openai_config)
 }
 
-/// Transcribe audio file to text using OpenAI-compatible API
-///
-/// This function:
-/// - Sends the WAV file to the transcription API
-/// - Waits for the response
-/// - Cleans up the temporary file
-/// - Returns the transcribed text
 pub async fn transcribe(
-    wav_path: PathBuf,
+    audio_path: &Path,
     client: &Client<OpenAIConfig>,
     config: &TranscriptionConfig,
 ) -> Result<String> {
-    tracing::info!("Transcribing file: {:?}", wav_path);
+    tracing::info!("Transcribing file: {:?}", audio_path);
 
-    let result = transcribe_file(&wav_path, client, config).await;
-
-    // Cleanup temp file
-    if let Err(e) = tokio::fs::remove_file(&wav_path).await {
-        tracing::warn!("Failed to remove temp file {:?}: {}", wav_path, e);
-    }
-
-    result
-}
-
-async fn transcribe_file(
-    path: &Path,
-    client: &Client<OpenAIConfig>,
-    config: &TranscriptionConfig,
-) -> Result<String> {
     let request = CreateTranscriptionRequestArgs::default()
-        .file(path.to_str().context("Invalid path")?)
+        .file(audio_path.to_str().context("Invalid path")?)
         .model(&config.model)
         .prompt(&config.prompt)
         .language(&config.language)

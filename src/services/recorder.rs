@@ -1,7 +1,7 @@
 use crate::audio::{AudioCapture, AudioFormat, AudioSink};
 use crate::messages::RecorderCommand;
 use anyhow::Result;
-use std::path::PathBuf;
+use tempfile::NamedTempFile;
 use tokio::sync::mpsc;
 
 /// Coordinates audio capture and encoding
@@ -21,6 +21,7 @@ pub struct Recorder {
     audio_tx: mpsc::Sender<Vec<f32>>,
     sink: Box<dyn AudioSink + Send>,
     stream: Option<cpal::Stream>,
+    temp_file: Option<NamedTempFile>,
     recording: bool,
 }
 
@@ -39,6 +40,7 @@ impl Recorder {
             audio_tx,
             sink,
             stream: None,
+            temp_file: None,
             recording: false,
         }
     }
@@ -66,17 +68,26 @@ impl Recorder {
     async fn handle_command(&mut self, cmd: RecorderCommand) {
         match cmd {
             RecorderCommand::Start => {
-                let timestamp = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-                let path = format!("/tmp/dictator-{}.wav", timestamp);
+                let temp_file = match tempfile::Builder::new()
+                    .prefix("dictator-")
+                    .suffix(".wav")
+                    .tempfile()
+                {
+                    Ok(file) => file,
+                    Err(e) => {
+                        tracing::error!("Failed to create temp file: {}", e);
+                        return;
+                    }
+                };
 
-                // Start sink
-                if let Err(e) = self.sink.start(PathBuf::from(path)) {
+                let path = temp_file.path().to_path_buf();
+
+                if let Err(e) = self.sink.start(path) {
                     tracing::error!("Failed to start sink: {}", e);
                     return;
                 }
+
+                self.temp_file = Some(temp_file);
 
                 // Start audio capture
                 match AudioCapture::start(self.format, self.audio_tx.clone()) {
@@ -115,10 +126,16 @@ impl Recorder {
                 // Give bridge task a moment to receive the Err from its send and exit
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-                // Finalize the recording (now fully async, no blocking)
-                let result = self.sink.finalize().await;
+                let finalize_result = self.sink.finalize().await;
 
-                // Send result back to coordinator
+                let result = match finalize_result {
+                    Ok(_path) => self
+                        .temp_file
+                        .take()
+                        .ok_or_else(|| anyhow::anyhow!("Temp file was not created")),
+                    Err(e) => Err(e),
+                };
+
                 let _ = reply.send(result);
 
                 tracing::info!("Recording stopped");
@@ -145,7 +162,7 @@ impl RecorderHandle {
             .map_err(|e| anyhow::anyhow!("Failed to send start command: {}", e))
     }
 
-    pub async fn stop(&self) -> Result<PathBuf> {
+    pub async fn stop(&self) -> Result<NamedTempFile> {
         let (reply, rx) = tokio::sync::oneshot::channel();
         self.tx
             .send(RecorderCommand::Stop(reply))
