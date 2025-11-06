@@ -118,7 +118,7 @@ async fn handle_toggle(
             state.send(AppState::Recording)?;
 
             if config.audio_feedback {
-                audio_feedback::play_start_sound(&config.start_sound_path).await;
+                audio_feedback::play_sound(&config.start_sound_path).await;
             }
 
             tracing::debug!("handle_toggle: calling recorder.start()");
@@ -131,7 +131,7 @@ async fn handle_toggle(
             state.send(AppState::Processing)?;
 
             if config.audio_feedback {
-                audio_feedback::play_stop_sound(&config.stop_sound_path).await;
+                audio_feedback::play_sound(&config.stop_sound_path).await;
             }
 
             let temp_file = recorder.stop().await?;
