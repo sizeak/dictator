@@ -1,46 +1,46 @@
 use anyhow::{Context, Result};
-use evdev::{Device, EventType, Key};
+use evdev::{Device, EventType, KeyCode};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
-/// Parse a shortcut string like "SUPER+ALT+D" into a set of Key codes
-pub fn parse_shortcut(shortcut: &str) -> Result<HashSet<Key>> {
+/// Parse a shortcut string like "SUPER+ALT+D" into a set of KeyCode codes
+pub fn parse_shortcut(shortcut: &str) -> Result<HashSet<KeyCode>> {
     let mut keys = HashSet::new();
 
     for part in shortcut.split('+') {
         let key = match part.trim().to_uppercase().as_str() {
-            "SUPER" | "META" | "WIN" => Key::KEY_LEFTMETA,
-            "ALT" => Key::KEY_LEFTALT,
-            "CTRL" | "CONTROL" => Key::KEY_LEFTCTRL,
-            "SHIFT" => Key::KEY_LEFTSHIFT,
+            "SUPER" | "META" | "WIN" => KeyCode::KEY_LEFTMETA,
+            "ALT" => KeyCode::KEY_LEFTALT,
+            "CTRL" | "CONTROL" => KeyCode::KEY_LEFTCTRL,
+            "SHIFT" => KeyCode::KEY_LEFTSHIFT,
             // Letter keys
-            "A" => Key::KEY_A,
-            "B" => Key::KEY_B,
-            "C" => Key::KEY_C,
-            "D" => Key::KEY_D,
-            "E" => Key::KEY_E,
-            "F" => Key::KEY_F,
-            "G" => Key::KEY_G,
-            "H" => Key::KEY_H,
-            "I" => Key::KEY_I,
-            "J" => Key::KEY_J,
-            "K" => Key::KEY_K,
-            "L" => Key::KEY_L,
-            "M" => Key::KEY_M,
-            "N" => Key::KEY_N,
-            "O" => Key::KEY_O,
-            "P" => Key::KEY_P,
-            "Q" => Key::KEY_Q,
-            "R" => Key::KEY_R,
-            "S" => Key::KEY_S,
-            "T" => Key::KEY_T,
-            "U" => Key::KEY_U,
-            "V" => Key::KEY_V,
-            "W" => Key::KEY_W,
-            "X" => Key::KEY_X,
-            "Y" => Key::KEY_Y,
-            "Z" => Key::KEY_Z,
+            "A" => KeyCode::KEY_A,
+            "B" => KeyCode::KEY_B,
+            "C" => KeyCode::KEY_C,
+            "D" => KeyCode::KEY_D,
+            "E" => KeyCode::KEY_E,
+            "F" => KeyCode::KEY_F,
+            "G" => KeyCode::KEY_G,
+            "H" => KeyCode::KEY_H,
+            "I" => KeyCode::KEY_I,
+            "J" => KeyCode::KEY_J,
+            "K" => KeyCode::KEY_K,
+            "L" => KeyCode::KEY_L,
+            "M" => KeyCode::KEY_M,
+            "N" => KeyCode::KEY_N,
+            "O" => KeyCode::KEY_O,
+            "P" => KeyCode::KEY_P,
+            "Q" => KeyCode::KEY_Q,
+            "R" => KeyCode::KEY_R,
+            "S" => KeyCode::KEY_S,
+            "T" => KeyCode::KEY_T,
+            "U" => KeyCode::KEY_U,
+            "V" => KeyCode::KEY_V,
+            "W" => KeyCode::KEY_W,
+            "X" => KeyCode::KEY_X,
+            "Y" => KeyCode::KEY_Y,
+            "Z" => KeyCode::KEY_Z,
             _ => {
                 return Err(anyhow::anyhow!("Unknown key: {}", part));
             }
@@ -55,7 +55,7 @@ pub fn parse_shortcut(shortcut: &str) -> Result<HashSet<Key>> {
 ///
 /// Spawns a task for each keyboard device found, and sends a message
 /// to the channel whenever the target combination is pressed
-pub async fn monitor_keyboards(target_keys: HashSet<Key>, tx: mpsc::Sender<()>) -> Result<()> {
+pub async fn monitor_keyboards(target_keys: HashSet<KeyCode>, tx: mpsc::Sender<()>) -> Result<()> {
     let keyboards = discover_keyboards()?;
 
     if keyboards.is_empty() {
@@ -80,7 +80,7 @@ pub async fn monitor_keyboards(target_keys: HashSet<Key>, tx: mpsc::Sender<()>) 
 
 async fn monitor_device(
     device: Device,
-    target_keys: HashSet<Key>,
+    target_keys: HashSet<KeyCode>,
     tx: mpsc::Sender<()>,
 ) -> Result<()> {
     let device_name = device
@@ -105,7 +105,7 @@ async fn monitor_device(
             .context("Failed to read event")?;
 
         if event.event_type() == EventType::KEY {
-            let key = Key(event.code());
+            let key = KeyCode(event.code());
 
             match event.value() {
                 1 => {
@@ -155,9 +155,9 @@ fn discover_keyboards() -> Result<Vec<Device>> {
 fn is_keyboard(device: &Device) -> bool {
     if let Some(keys) = device.supported_keys() {
         // Check for common keyboard keys
-        keys.contains(Key::KEY_A)
-            && keys.contains(Key::KEY_S)
-            && keys.contains(Key::KEY_ENTER)
+        keys.contains(KeyCode::KEY_A)
+            && keys.contains(KeyCode::KEY_S)
+            && keys.contains(KeyCode::KEY_ENTER)
     } else {
         false
     }
@@ -171,9 +171,9 @@ mod tests {
     fn test_parse_shortcut() {
         let keys = parse_shortcut("SUPER+ALT+D").unwrap();
         assert_eq!(keys.len(), 3);
-        assert!(keys.contains(&Key::KEY_LEFTMETA));
-        assert!(keys.contains(&Key::KEY_LEFTALT));
-        assert!(keys.contains(&Key::KEY_D));
+        assert!(keys.contains(&KeyCode::KEY_LEFTMETA));
+        assert!(keys.contains(&KeyCode::KEY_LEFTALT));
+        assert!(keys.contains(&KeyCode::KEY_D));
     }
 
     #[test]

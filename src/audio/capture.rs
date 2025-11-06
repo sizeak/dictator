@@ -2,8 +2,7 @@ use super::format::AudioFormat;
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{BufferSize, SampleRate, StreamConfig};
-use ringbuf::HeapRb;
-use std::sync::Arc;
+use ringbuf::{traits::*, HeapRb};
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 
@@ -77,7 +76,7 @@ impl AudioCapture {
     /// This task runs asynchronously and bridges the gap between the sync
     /// real-time audio callback and the async tokio world
     async fn bridge_task(
-        mut consumer: ringbuf::Consumer<f32, Arc<HeapRb<f32>>>,
+        mut consumer: impl Consumer<Item = f32> + Observer,
         tx: mpsc::Sender<Vec<f32>>,
         chunk_size: usize,
     ) {
@@ -86,7 +85,7 @@ impl AudioCapture {
         loop {
             tick.tick().await;
 
-            let available = consumer.len();
+            let available = consumer.occupied_len();
             if available >= chunk_size {
                 // Allocate and copy from ringbuf (unavoidable single copy)
                 let mut chunk = vec![0.0f32; chunk_size];
