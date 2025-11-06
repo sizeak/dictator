@@ -19,12 +19,10 @@ use tokio::sync::{mpsc, watch};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
     tracing_subscriber::fmt::init();
 
     tracing::info!("Starting dictator voice transcription daemon");
 
-    // Load configuration
     let config = Config::load()?;
     config.validate()?;
 
@@ -35,10 +33,8 @@ async fn main() -> Result<()> {
 }
 
 async fn run_app(config: Config) -> Result<()> {
-    // Observable application state
     let (state_tx, _state_rx) = watch::channel(AppState::Idle);
 
-    // Setup audio capture channel
     let (audio_tx, audio_rx) = mpsc::channel(100);
     let format = AudioFormat::default(); // 16kHz, mono
     let sink: Box<dyn AudioSink + Send> = Box::new(WavSink::new(format));
@@ -49,7 +45,6 @@ async fn run_app(config: Config) -> Result<()> {
     let recorder_handle = RecorderHandle::new(recorder_tx);
     tokio::task::spawn_local(recorder.run());
 
-    // Setup transcription client and config
     let transcription_client =
         transcription::create_client(config.api_url.clone(), config.api_key.clone());
     let transcription_config = transcription::TranscriptionConfig {
@@ -58,10 +53,8 @@ async fn run_app(config: Config) -> Result<()> {
         language: config.language.clone().unwrap_or_default(),
     };
 
-    // Setup text processor
     let text_processor = TextProcessor::new(config.word_overrides.clone());
 
-    // Setup keyboard monitoring
     let (shortcut_tx, mut shortcut_rx) = mpsc::channel(10);
     let target_keys = shortcuts::parse_shortcut(&config.primary_shortcut)?;
     tokio::spawn(shortcuts::monitor_keyboards(target_keys, shortcut_tx));
@@ -71,7 +64,6 @@ async fn run_app(config: Config) -> Result<()> {
         config.primary_shortcut
     );
 
-    // Main event loop
     loop {
         tracing::debug!("Main loop: waiting for event");
         tokio::select! {
