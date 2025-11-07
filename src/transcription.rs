@@ -12,10 +12,10 @@ pub struct TranscriptionConfig {
 }
 
 /// Create a transcription client
-pub fn create_client(api_url: String, api_key: String) -> Client<OpenAIConfig> {
+pub fn create_client(api_url: &str, api_key: &str) -> Client<OpenAIConfig> {
     let openai_config = OpenAIConfig::new()
-        .with_api_base(api_url)
-        .with_api_key(api_key);
+        .with_api_base(api_url.to_string())
+        .with_api_key(api_key.to_string());
 
     Client::with_config(openai_config)
 }

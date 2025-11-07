@@ -12,15 +12,15 @@ pub struct TextProcessor {
 }
 
 impl TextProcessor {
-    pub fn new(overrides: HashMap<String, String>) -> Self {
+    pub fn new(overrides: &HashMap<String, String>) -> Self {
         // Compile word overrides into regexes
         let word_overrides = overrides
-            .into_iter()
+            .iter()
             .filter_map(|(k, v)| {
                 // Case-insensitive word boundary match
-                Regex::new(&format!(r"(?i)\b{}\b", regex::escape(&k)))
+                Regex::new(&format!(r"(?i)\b{}\b", regex::escape(k)))
                     .ok()
-                    .map(|re| (re, v))
+                    .map(|re| (re, v.clone()))
             })
             .collect();
 
@@ -94,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_punctuation_commands() {
-        let processor = TextProcessor::new(HashMap::new());
+        let processor = TextProcessor::new(&HashMap::new());
 
         assert_eq!(processor.process("hello period"), "hello .");
         assert_eq!(processor.process("hello comma world"), "hello , world");
@@ -109,7 +109,7 @@ mod tests {
         let mut overrides = HashMap::new();
         overrides.insert("dictator".to_string(), "dctr".to_string());
 
-        let processor = TextProcessor::new(overrides);
+        let processor = TextProcessor::new(&overrides);
 
         assert_eq!(
             processor.process("dictator is cool"),
@@ -126,7 +126,7 @@ mod tests {
         let mut overrides = HashMap::new();
         overrides.insert("dictator".to_string(), "Dictator".to_string());
 
-        let processor = TextProcessor::new(overrides);
+        let processor = TextProcessor::new(&overrides);
 
         assert_eq!(
             processor.process("dictator is great period"),
