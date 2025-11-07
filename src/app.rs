@@ -47,10 +47,10 @@ impl App {
         })
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self) -> Result<()> {
         loop {
             tracing::debug!("Main loop: waiting for event");
-            if let Some(_) = self.shortcut_rx.recv().await {
+            if self.shortcut_rx.recv().await.is_some() {
                 tracing::debug!("Main loop: received shortcut signal");
                 if let Err(e) = self.handle_toggle().await {
                     tracing::error!("Error handling toggle: {}", e);

@@ -76,7 +76,7 @@ impl AudioCapture {
     /// This task runs asynchronously and bridges the gap between the sync
     /// real-time audio callback and the async tokio world
     async fn bridge_task(
-        mut consumer: impl Consumer<Item = f32> + Observer,
+        mut consumer: impl Consumer<Item = f32>,
         tx: mpsc::Sender<Vec<f32>>,
         chunk_size: usize,
     ) {
