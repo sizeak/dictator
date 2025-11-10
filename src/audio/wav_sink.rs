@@ -7,9 +7,8 @@ use std::path::PathBuf;
 use tokio::sync::{mpsc, oneshot};
 
 enum WavCommand {
-    Start { path: PathBuf, spec: WavSpec },
-    WriteChunk(Vec<f32>), // Takes ownership, no copy
-    Finalize { reply: oneshot::Sender<Result<PathBuf>> },
+    WriteChunk(Vec<f32>),
+    Finalize { reply: oneshot::Sender<Result<()>> },
 }
 
 /// WAV encoder using a dedicated blocking thread for I/O
@@ -19,90 +18,65 @@ enum WavCommand {
 /// to the thread via a channel and written sequentially to the WAV file.
 pub struct WavSink {
     tx: mpsc::UnboundedSender<WavCommand>,
-    format: AudioFormat,
 }
 
 impl WavSink {
-    pub fn new(format: AudioFormat) -> Self {
+    pub fn new(path: PathBuf, format: AudioFormat) -> Result<Self> {
+        let spec = WavSpec {
+            channels: format.channels,
+            sample_rate: format.sample_rate,
+            bits_per_sample: AudioFormat::BITS_PER_SAMPLE,
+            sample_format: SampleFormat::Int,
+        };
+
+        let mut writer = WavWriter::create(&path, spec)
+            .map_err(|e| anyhow::anyhow!("Failed to create WAV writer: {}", e))?;
+
         let (tx, mut rx) = mpsc::unbounded_channel();
 
-        // Spawn dedicated blocking thread for WAV file I/O
         std::thread::spawn(move || {
-            let mut writer: Option<WavWriter<std::io::BufWriter<std::fs::File>>> = None;
-            let mut current_path: Option<PathBuf> = None;
-
             while let Some(cmd) = rx.blocking_recv() {
                 match cmd {
-                    WavCommand::Start { path, spec } => {
-                        match WavWriter::create(&path, spec) {
-                            Ok(w) => {
-                                writer = Some(w);
-                                current_path = Some(path);
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to create WAV writer: {}", e);
-                            }
-                        }
-                    }
                     WavCommand::WriteChunk(samples) => {
-                        if let Some(w) = &mut writer {
-                            for sample in samples {
-                                // Convert f32 (-1.0 to 1.0) to i16
-                                let amplitude = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
-                                if let Err(e) = w.write_sample(amplitude) {
-                                    eprintln!("Failed to write sample: {}", e);
-                                    break;
-                                }
+                        for sample in samples {
+                            // Convert f32 (-1.0 to 1.0) to i16
+                            let amplitude = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+                            if let Err(e) = writer.write_sample(amplitude) {
+                                eprintln!("Failed to write sample: {}", e);
+                                break;
                             }
                         }
                     }
                     WavCommand::Finalize { reply } => {
-                        let result = if let Some(w) = writer.take() {
-                            w.finalize()
-                                .map(|_| current_path.take().unwrap())
-                                .map_err(|e| anyhow::anyhow!("Failed to finalize WAV: {}", e))
-                        } else {
-                            Err(anyhow::anyhow!("No active writer to finalize"))
-                        };
+                        let result = writer
+                            .finalize()
+                            .map(|_| ())
+                            .map_err(|e| anyhow::anyhow!("Failed to finalize WAV: {}", e));
                         let _ = reply.send(result);
+                        break;
                     }
                 }
             }
         });
 
-        Self { tx, format }
+        Ok(Self { tx })
     }
 }
 
 #[async_trait]
 impl AudioSink for WavSink {
-    fn start(&mut self, path: PathBuf) -> Result<()> {
-        let spec = WavSpec {
-            channels: self.format.channels,
-            sample_rate: self.format.sample_rate,
-            bits_per_sample: AudioFormat::BITS_PER_SAMPLE,
-            sample_format: SampleFormat::Int,
-        };
-
-        self.tx
-            .send(WavCommand::Start { path, spec })
-            .map_err(|e| anyhow::anyhow!("Failed to send start command: {}", e))
-    }
-
     fn write_chunk(&mut self, samples: Vec<f32>) -> Result<()> {
-        // Vec is moved into the command - no copy
         self.tx
             .send(WavCommand::WriteChunk(samples))
             .map_err(|e| anyhow::anyhow!("Failed to send write command: {}", e))
     }
 
-    async fn finalize(&mut self) -> Result<PathBuf> {
+    async fn finalize(&mut self) -> Result<()> {
         let (reply, rx) = oneshot::channel();
         self.tx
             .send(WavCommand::Finalize { reply })
             .map_err(|e| anyhow::anyhow!("Failed to send finalize command: {}", e))?;
 
-        // Await until the WAV file is finalized
         rx.await
             .map_err(|e| anyhow::anyhow!("Failed to receive finalize response: {}", e))?
     }

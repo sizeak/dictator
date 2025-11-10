@@ -1,4 +1,4 @@
-use crate::audio::{AudioCapture, AudioFormat, AudioSink};
+use crate::audio::{AudioCapture, AudioFormat, AudioSink, WavSink};
 use crate::messages::RecorderCommand;
 use anyhow::Result;
 use tempfile::NamedTempFile;
@@ -19,7 +19,7 @@ pub struct Recorder {
     cmd_rx: mpsc::Receiver<RecorderCommand>,
     audio_rx: mpsc::Receiver<Vec<f32>>,
     audio_tx: mpsc::Sender<Vec<f32>>,
-    sink: Box<dyn AudioSink + Send>,
+    sink: Option<Box<dyn AudioSink + Send>>,
     stream: Option<cpal::Stream>,
     temp_file: Option<NamedTempFile>,
     recording: bool,
@@ -31,14 +31,13 @@ impl Recorder {
         cmd_rx: mpsc::Receiver<RecorderCommand>,
         audio_rx: mpsc::Receiver<Vec<f32>>,
         audio_tx: mpsc::Sender<Vec<f32>>,
-        sink: Box<dyn AudioSink + Send>,
     ) -> Self {
         Self {
             format,
             cmd_rx,
             audio_rx,
             audio_tx,
-            sink,
+            sink: None,
             stream: None,
             temp_file: None,
             recording: false,
@@ -56,10 +55,11 @@ impl Recorder {
                 // Receive and process audio chunks (only when recording)
                 Some(chunk) = self.audio_rx.recv(), if self.recording => {
                     // Stream chunk to sink (Vec is moved, no copy)
-                    if let Err(e) = self.sink.write_chunk(chunk) {
-                        tracing::error!("Failed to write audio chunk: {}", e);
-                        self.recording = false;
-                    }
+                    if let Some(sink) = &mut self.sink
+                        && let Err(e) = sink.write_chunk(chunk) {
+                            tracing::error!("Failed to write audio chunk: {}", e);
+                            self.recording = false;
+                        }
                 }
             }
         }
@@ -82,11 +82,16 @@ impl Recorder {
 
                 let path = temp_file.path().to_path_buf();
 
-                if let Err(e) = self.sink.start(path) {
-                    tracing::error!("Failed to start sink: {}", e);
-                    return;
-                }
+                // Create sink with the path
+                let sink = match WavSink::new(path, self.format) {
+                    Ok(s) => Box::new(s) as Box<dyn AudioSink + Send>,
+                    Err(e) => {
+                        tracing::error!("Failed to create sink: {}", e);
+                        return;
+                    }
+                };
 
+                self.sink = Some(sink);
                 self.temp_file = Some(temp_file);
 
                 // Start audio capture
@@ -108,32 +113,34 @@ impl Recorder {
                 // Drop the stream to stop audio capture
                 self.stream = None;
 
-                // Drain any remaining audio chunks from the channel and write them to the sink
-                while let Ok(chunk) = self.audio_rx.try_recv() {
-                    if let Err(e) = self.sink.write_chunk(chunk) {
-                        tracing::error!("Failed to write audio chunk during drain: {}", e);
-                        break;
+                let result = if let Some(mut sink) = self.sink.take() {
+                    // Drain any remaining audio chunks from the channel and write them to the sink
+                    while let Ok(chunk) = self.audio_rx.try_recv() {
+                        if let Err(e) = sink.write_chunk(chunk) {
+                            tracing::error!("Failed to write audio chunk during drain: {}", e);
+                            break;
+                        }
                     }
-                }
 
-                // Replace audio channel with a fresh one for next recording
-                // This drops the old receiver, which causes the bridge task's tx.send() to fail
-                // and signals it to exit cleanly
-                let (new_audio_tx, new_audio_rx) = mpsc::channel(100);
-                self.audio_tx = new_audio_tx;
-                self.audio_rx = new_audio_rx;
+                    // Replace audio channel with a fresh one for next recording
+                    // This drops the old receiver, which causes the bridge task's tx.send() to fail
+                    // and signals it to exit cleanly
+                    let (new_audio_tx, new_audio_rx) = mpsc::channel(100);
+                    self.audio_tx = new_audio_tx;
+                    self.audio_rx = new_audio_rx;
 
-                // Give bridge task a moment to receive the Err from its send and exit
-                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    // Give bridge task a moment to receive the Err from its send and exit
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-                let finalize_result = self.sink.finalize().await;
-
-                let result = match finalize_result {
-                    Ok(_path) => self
-                        .temp_file
-                        .take()
-                        .ok_or_else(|| anyhow::anyhow!("Temp file was not created")),
-                    Err(e) => Err(e),
+                    match sink.finalize().await {
+                        Ok(()) => self
+                            .temp_file
+                            .take()
+                            .ok_or_else(|| anyhow::anyhow!("Temp file was not created")),
+                        Err(e) => Err(e),
+                    }
+                } else {
+                    Err(anyhow::anyhow!("No active sink to finalize"))
                 };
 
                 let _ = reply.send(result);

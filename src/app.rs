@@ -1,4 +1,4 @@
-use crate::audio::{AudioFormat, WavSink};
+use crate::audio::AudioFormat;
 use crate::audio_feedback;
 use crate::config::Config;
 use crate::messages::AppState;
@@ -151,11 +151,10 @@ impl App {
     fn setup_audio_pipeline() -> RecorderHandle {
         let (audio_tx, audio_rx) = mpsc::channel(100);
         let format = AudioFormat::default(); // 16kHz, mono
-        let sink = Box::new(WavSink::new(format));
 
         // Create and spawn Recorder (using spawn_local because it's !Send)
         let (recorder_tx, recorder_rx) = mpsc::channel(10);
-        let recorder = Recorder::new(format, recorder_rx, audio_rx, audio_tx, sink);
+        let recorder = Recorder::new(format, recorder_rx, audio_rx, audio_tx);
         let recorder_handle = RecorderHandle::new(recorder_tx);
         tokio::task::spawn_local(recorder.run());
 
