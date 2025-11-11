@@ -83,7 +83,11 @@ The daemon will start and listen for the configured keyboard shortcut (default: 
 - `api_key`: API authentication key
 - `model`: Model name for transcription (e.g., "whisper-1" for OpenAI, model path for local servers)
 - `primary_shortcut`: Keyboard shortcut (format: "SUPER+ALT+D")
-- `paste_mode`: Paste shortcut ("ctrl_shift" for Ctrl+Shift+V, "super" for Super+V, "ctrl" for Ctrl+V)
+- `paste_mode`: How to paste transcribed text:
+  - `"none"`: Copy to clipboard only, no auto-paste
+  - `"ctrl"`: Auto-paste using Ctrl+V
+  - `"ctrl_shift"`: Auto-paste using Ctrl+Shift+V (default)
+  - `"super"`: Auto-paste using Super+V
 - `audio_feedback`: Enable/disable sound effects (true/false)
 - `start_sound_path`: Path to recording start sound
 - `stop_sound_path`: Path to recording stop sound

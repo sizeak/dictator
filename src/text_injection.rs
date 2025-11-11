@@ -4,16 +4,18 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use tokio::task;
 
+use crate::config::PasteMode;
+
 /// Inject processed text into the system via clipboard and keyboard simulation
 ///
 /// This function:
 /// - Copies the processed text to clipboard via wl-copy
-/// - Waits for clipboard to settle
-/// - Triggers paste via ydotool with the specified keyboard shortcut
-pub async fn inject_text(processed_text: String, paste_mode: &str) -> Result<()> {
-    tracing::info!("Injecting text: {} chars", processed_text.len());
+/// - Waits for clipboard to settle (if paste_mode is not None)
+/// - Triggers paste via ydotool with the specified keyboard shortcut (unless paste_mode is None)
+pub async fn inject_text(processed_text: String, paste_mode: &PasteMode) -> Result<()> {
+    tracing::info!("Processing text: {} chars", processed_text.len());
 
-    let paste_mode = paste_mode.to_string();
+    let paste_mode = *paste_mode;
 
     // Use spawn_blocking for external commands
     task::spawn_blocking(move || {
@@ -32,22 +34,31 @@ pub async fn inject_text(processed_text: String, paste_mode: &str) -> Result<()>
 
         child.wait().context("wl-copy failed")?;
 
-        // Wait for clipboard to settle
-        std::thread::sleep(Duration::from_millis(120));
+        // Only trigger paste if not in "none" mode
+        match paste_mode {
+            PasteMode::None => {
+                tracing::info!("Text copied to clipboard (paste_mode: none)");
+            }
+            _ => {
+                // Wait for clipboard to settle
+                std::thread::sleep(Duration::from_millis(120));
 
-        // Trigger paste via ydotool
-        let keycodes = match paste_mode.as_str() {
-            "super" => "125:1 47:1 47:0 125:0",              // Super+V
-            "ctrl_shift" => "29:1 42:1 47:1 47:0 42:0 29:0", // Ctrl+Shift+V
-            _ => "29:1 47:1 47:0 29:0",                      // Ctrl+V
-        };
+                // Trigger paste via ydotool
+                let keycodes = match paste_mode {
+                    PasteMode::Super => "125:1 47:1 47:0 125:0",              // Super+V
+                    PasteMode::CtrlShift => "29:1 42:1 47:1 47:0 42:0 29:0", // Ctrl+Shift+V
+                    PasteMode::Ctrl => "29:1 47:1 47:0 29:0",                // Ctrl+V
+                    PasteMode::None => unreachable!(),
+                };
 
-        Command::new("ydotool")
-            .args(["key", keycodes])
-            .output()
-            .context("Failed to execute ydotool")?;
+                Command::new("ydotool")
+                    .args(["key", keycodes])
+                    .output()
+                    .context("Failed to execute ydotool")?;
 
-        tracing::info!("Text injected successfully");
+                tracing::info!("Text injected successfully");
+            }
+        }
         Ok::<(), anyhow::Error>(())
     })
     .await

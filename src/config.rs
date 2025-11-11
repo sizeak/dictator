@@ -3,6 +3,21 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PasteMode {
+    None,
+    Ctrl,
+    CtrlShift,
+    Super,
+}
+
+impl Default for PasteMode {
+    fn default() -> Self {
+        Self::CtrlShift
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default = "default_shortcut")]
@@ -23,8 +38,8 @@ pub struct Config {
     #[serde(default)]
     pub whisper_prompt: Option<String>,
 
-    #[serde(default = "default_paste_mode")]
-    pub paste_mode: String,
+    #[serde(default)]
+    pub paste_mode: PasteMode,
 
     #[serde(default)]
     pub word_overrides: HashMap<String, String>,
@@ -61,10 +76,6 @@ fn default_model() -> String {
     "Systran/faster-whisper-base".to_string()
 }
 
-fn default_paste_mode() -> String {
-    "ctrl_shift".to_string()
-}
-
 fn default_audio_feedback() -> bool {
     true
 }
@@ -94,7 +105,7 @@ impl Default for Config {
             model: default_model(),
             language: None,
             whisper_prompt: None,
-            paste_mode: default_paste_mode(),
+            paste_mode: PasteMode::default(),
             word_overrides: HashMap::new(),
             audio_feedback: default_audio_feedback(),
             start_sound_path: default_start_sound(),
@@ -169,12 +180,6 @@ impl Config {
 
         if self.model.is_empty() {
             return Err(anyhow::anyhow!("model cannot be empty"));
-        }
-
-        if !["super", "ctrl_shift", "ctrl"].contains(&self.paste_mode.as_str()) {
-            return Err(anyhow::anyhow!(
-                "paste_mode must be one of: super, ctrl_shift, ctrl"
-            ));
         }
 
         Ok(())
