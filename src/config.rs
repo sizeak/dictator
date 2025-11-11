@@ -53,6 +53,9 @@ pub struct Config {
     #[serde(default = "default_stop_sound")]
     pub stop_sound_path: String,
 
+    #[serde(default = "default_complete_sound")]
+    pub complete_sound_path: String,
+
     #[serde(default = "default_timeout")]
     pub timeout: u64,
 
@@ -88,6 +91,10 @@ fn default_stop_sound() -> String {
     "ping-down.ogg".to_string()
 }
 
+fn default_complete_sound() -> String {
+    "ping-complete.ogg".to_string()
+}
+
 fn default_timeout() -> u64 {
     30
 }
@@ -110,6 +117,7 @@ impl Default for Config {
             audio_feedback: default_audio_feedback(),
             start_sound_path: default_start_sound(),
             stop_sound_path: default_stop_sound(),
+            complete_sound_path: default_complete_sound(),
             timeout: default_timeout(),
             max_retries: default_max_retries(),
         }

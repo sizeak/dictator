@@ -14,6 +14,7 @@ use tokio::sync::mpsc;
 enum FeedbackSoundType {
     Start,
     Stop,
+    Complete,
 }
 
 pub struct App {
@@ -77,6 +78,7 @@ impl App {
             let sound_path = match sound_type {
                 FeedbackSoundType::Start => &self.config.start_sound_path,
                 FeedbackSoundType::Stop => &self.config.stop_sound_path,
+                FeedbackSoundType::Complete => &self.config.complete_sound_path,
             };
             audio_feedback::play_sound(sound_path).await;
         }
@@ -141,6 +143,8 @@ impl App {
 
         tracing::info!("Injecting text...");
         text_injection::inject_text(processed_text, &self.config.paste_mode).await?;
+
+        self.play_feedback_if_enabled(FeedbackSoundType::Complete).await;
 
         tracing::info!("Complete!");
         self.state = AppState::Idle;

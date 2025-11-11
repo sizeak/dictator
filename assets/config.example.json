@@ -7,6 +7,7 @@
   "audio_feedback": true,
   "start_sound_path": "/usr/share/sounds/freedesktop/stereo/message.oga",
   "stop_sound_path": "/usr/share/sounds/freedesktop/stereo/complete.oga",
+  "complete_sound_path": "ping-complete.ogg",
   "language": "en",
   "whisper_prompt": "",
   "word_overrides": {

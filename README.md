@@ -114,6 +114,9 @@ All configuration is stored in `~/.config/dictator/config.json`.
 
 - **`stop_sound_path`**: Path to recording stop sound (default: `"ping-down.ogg"`)
 
+- **`complete_sound_path`**: Path to completion notification sound (default: `"ping-complete.ogg"`)
+  - Plays when transcription completes and text is injected/copied to clipboard
+
 - **`language`**: Two-letter language code for transcription (e.g., `"en"`, `"es"`, `"fr"`)
   - If not specified, API will auto-detect language
 
