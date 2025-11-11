@@ -48,13 +48,13 @@ pub struct Config {
     pub audio_feedback: bool,
 
     #[serde(default = "default_start_sound")]
-    pub start_sound_path: String,
+    pub start_sound_path: PathBuf,
 
     #[serde(default = "default_stop_sound")]
-    pub stop_sound_path: String,
+    pub stop_sound_path: PathBuf,
 
     #[serde(default = "default_complete_sound")]
-    pub complete_sound_path: String,
+    pub complete_sound_path: PathBuf,
 
     #[serde(default = "default_timeout")]
     pub timeout: u64,
@@ -83,16 +83,16 @@ fn default_audio_feedback() -> bool {
     true
 }
 
-fn default_start_sound() -> String {
-    "ping-up.ogg".to_string()
+fn default_start_sound() -> PathBuf {
+    PathBuf::from("ping-up.ogg")
 }
 
-fn default_stop_sound() -> String {
-    "ping-down.ogg".to_string()
+fn default_stop_sound() -> PathBuf {
+    PathBuf::from("ping-down.ogg")
 }
 
-fn default_complete_sound() -> String {
-    "ping-complete.ogg".to_string()
+fn default_complete_sound() -> PathBuf {
+    PathBuf::from("ping-complete.ogg")
 }
 
 fn default_timeout() -> u64 {

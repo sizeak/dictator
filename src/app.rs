@@ -1,5 +1,5 @@
 use crate::audio::AudioFormat;
-use crate::audio_feedback;
+use crate::audio_feedback::{AudioFeedback, FeedbackSoundType};
 use crate::config::Config;
 use crate::messages::AppState;
 use crate::services::{Recorder, RecorderHandle};
@@ -9,13 +9,8 @@ use crate::transcription;
 use crate::{shortcuts, transcription::TranscriptionConfig};
 
 use anyhow::Result;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
-
-enum FeedbackSoundType {
-    Start,
-    Stop,
-    Complete,
-}
 
 pub struct App {
     state: AppState,
@@ -23,7 +18,19 @@ pub struct App {
     recorder: RecorderHandle,
     transcription_client: async_openai::Client<async_openai::config::OpenAIConfig>,
     text_processor: TextProcessor,
+    audio_feedback: AudioFeedback,
     shortcut_rx: mpsc::Receiver<()>,
+}
+
+fn build_audio_feedback(config: &Config) -> AudioFeedback {
+    let mut paths = HashMap::new();
+    paths.insert(FeedbackSoundType::Start, config.start_sound_path.clone());
+    paths.insert(FeedbackSoundType::Stop, config.stop_sound_path.clone());
+    paths.insert(
+        FeedbackSoundType::Complete,
+        config.complete_sound_path.clone(),
+    );
+    AudioFeedback::new(paths)
 }
 
 impl App {
@@ -31,6 +38,7 @@ impl App {
         let recorder = Self::setup_audio_pipeline();
         let transcription_client = transcription::create_client(&config.api_url, &config.api_key);
         let text_processor = TextProcessor::new(&config.word_overrides);
+        let audio_feedback = build_audio_feedback(&config);
         let shortcut_rx = Self::setup_keyboard_monitoring(&config.primary_shortcut)?;
 
         tracing::info!(
@@ -44,6 +52,7 @@ impl App {
             recorder,
             transcription_client,
             text_processor,
+            audio_feedback,
             shortcut_rx,
         })
     }
@@ -75,12 +84,7 @@ impl App {
 
     async fn play_feedback_if_enabled(&self, sound_type: FeedbackSoundType) {
         if self.config.audio_feedback {
-            let sound_path = match sound_type {
-                FeedbackSoundType::Start => &self.config.start_sound_path,
-                FeedbackSoundType::Stop => &self.config.stop_sound_path,
-                FeedbackSoundType::Complete => &self.config.complete_sound_path,
-            };
-            audio_feedback::play_sound(sound_path).await;
+            self.audio_feedback.play(sound_type).await;
         }
     }
 
@@ -144,7 +148,8 @@ impl App {
         tracing::info!("Injecting text...");
         text_injection::inject_text(processed_text, &self.config.paste_mode).await?;
 
-        self.play_feedback_if_enabled(FeedbackSoundType::Complete).await;
+        self.play_feedback_if_enabled(FeedbackSoundType::Complete)
+            .await;
 
         tracing::info!("Complete!");
         self.state = AppState::Idle;
