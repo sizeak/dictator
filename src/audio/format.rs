@@ -2,7 +2,6 @@
 // All audio processing, capture, and encoding is done with this format.
 // If we need to support other formats in the future, this will need to be parameterized.
 
-/// Audio format configuration
 #[derive(Debug, Clone, Copy)]
 pub struct AudioFormat {
     pub sample_rate: u32,
@@ -10,8 +9,12 @@ pub struct AudioFormat {
 }
 
 impl AudioFormat {
-    /// Bits per sample - the entire application currently uses 16-bit signed PCM
     pub const BITS_PER_SAMPLE: u16 = 16;
+
+    /// Calculate number of samples for a given duration in seconds
+    pub fn samples_for_duration(&self, seconds: f32) -> usize {
+        (self.sample_rate as f32 * seconds) as usize
+    }
 }
 
 impl Default for AudioFormat {
