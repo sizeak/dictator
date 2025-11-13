@@ -47,14 +47,11 @@ impl Recorder {
     pub async fn run(mut self) {
         loop {
             tokio::select! {
-                // Handle commands from coordinator
                 Some(cmd) = self.cmd_rx.recv() => {
                     self.handle_command(cmd).await;
                 }
 
-                // Receive and process audio chunks (only when recording)
                 Some(chunk) = self.audio_rx.recv(), if self.recording => {
-                    // Stream chunk to sink (Vec is moved, no copy)
                     if let Some(sink) = &mut self.sink
                         && let Err(e) = sink.write_chunk(chunk) {
                             tracing::error!("Failed to write audio chunk: {}", e);
@@ -82,7 +79,6 @@ impl Recorder {
 
                 let path = temp_file.path().to_path_buf();
 
-                // Create sink with the path
                 let sink = match WavSink::new(path, self.format) {
                     Ok(s) => Box::new(s) as Box<dyn AudioSink + Send>,
                     Err(e) => {
@@ -94,7 +90,6 @@ impl Recorder {
                 self.sink = Some(sink);
                 self.temp_file = Some(temp_file);
 
-                // Start audio capture
                 match AudioCapture::start(self.format, self.audio_tx.clone()) {
                     Ok(stream) => {
                         self.stream = Some(stream);
@@ -109,12 +104,9 @@ impl Recorder {
 
             RecorderCommand::Stop(reply) => {
                 self.recording = false;
-
-                // Drop the stream to stop audio capture
                 self.stream = None;
 
                 let result = if let Some(mut sink) = self.sink.take() {
-                    // Drain any remaining audio chunks from the channel and write them to the sink
                     while let Ok(chunk) = self.audio_rx.try_recv() {
                         if let Err(e) = sink.write_chunk(chunk) {
                             tracing::error!("Failed to write audio chunk during drain: {}", e);
@@ -122,14 +114,12 @@ impl Recorder {
                         }
                     }
 
-                    // Replace audio channel with a fresh one for next recording
-                    // This drops the old receiver, which causes the bridge task's tx.send() to fail
-                    // and signals it to exit cleanly
+                    // Replace channel to signal bridge task to exit
                     let (new_audio_tx, new_audio_rx) = mpsc::channel(100);
                     self.audio_tx = new_audio_tx;
                     self.audio_rx = new_audio_rx;
 
-                    // Give bridge task a moment to receive the Err from its send and exit
+                    // Wait for bridge task to exit
                     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
                     match sink.finalize().await {
