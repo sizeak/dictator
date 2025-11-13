@@ -1,8 +1,5 @@
-use crate::audio::AudioFormat;
-use crate::audio_feedback::{AudioFeedback, FeedbackSoundType};
+use crate::audio::{feedback::FeedbackSoundType, AudioFeedback, AudioFormat, Recorder};
 use crate::config::Config;
-use crate::messages::AppState;
-use crate::services::Recorder;
 use crate::text_injection;
 use crate::text_processing::TextProcessor;
 use crate::transcription;
@@ -11,6 +8,13 @@ use crate::{shortcuts, transcription::TranscriptionConfig};
 use anyhow::Result;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AppState {
+    Idle,
+    Recording,
+    Processing,
+}
 
 pub struct App {
     state: AppState,
