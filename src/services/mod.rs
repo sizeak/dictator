@@ -1,3 +1,3 @@
 pub mod recorder;
 
-pub use recorder::{Recorder, RecorderHandle};
+pub use recorder::Recorder;

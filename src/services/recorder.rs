@@ -1,172 +1,105 @@
 use crate::audio::{AudioCapture, AudioFormat, AudioSink, WavSink};
-use crate::messages::RecorderCommand;
 use anyhow::Result;
 use tempfile::NamedTempFile;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinHandle;
 
-/// Coordinates audio capture and encoding
+/// Manages audio recording lifecycle
 ///
-/// This service:
-/// - Manages AudioCapture lifecycle
-/// - Receives audio chunks via channel
-/// - Streams chunks to AudioSink for encoding
-/// - Handles start/stop commands
-///
-/// Note: This service holds cpal::Stream which is !Send, so it must be spawned
-/// on a LocalSet using tokio::task::spawn_local.
+/// Spawns recording tasks on-demand when start() is called.
+/// Holds the cpal::Stream (which is !Send) but spawns Send tasks for actual recording work.
 pub struct Recorder {
     format: AudioFormat,
-    cmd_rx: mpsc::Receiver<RecorderCommand>,
-    audio_rx: mpsc::Receiver<Vec<f32>>,
-    audio_tx: mpsc::Sender<Vec<f32>>,
-    sink: Option<Box<dyn AudioSink + Send>>,
     stream: Option<cpal::Stream>,
-    temp_file: Option<NamedTempFile>,
-    recording: bool,
+    task_handle: Option<JoinHandle<Result<NamedTempFile>>>,
+    stop_tx: Option<oneshot::Sender<()>>,
 }
 
 impl Recorder {
-    pub fn new(
-        format: AudioFormat,
-        cmd_rx: mpsc::Receiver<RecorderCommand>,
-        audio_rx: mpsc::Receiver<Vec<f32>>,
-        audio_tx: mpsc::Sender<Vec<f32>>,
-    ) -> Self {
+    pub fn new(format: AudioFormat) -> Self {
         Self {
             format,
-            cmd_rx,
-            audio_rx,
-            audio_tx,
-            sink: None,
             stream: None,
-            temp_file: None,
-            recording: false,
+            task_handle: None,
+            stop_tx: None,
         }
     }
 
-    pub async fn run(mut self) {
-        loop {
-            tokio::select! {
-                Some(cmd) = self.cmd_rx.recv() => {
-                    self.handle_command(cmd).await;
-                }
-
-                Some(chunk) = self.audio_rx.recv(), if self.recording => {
-                    if let Some(sink) = &mut self.sink
-                        && let Err(e) = sink.write_chunk(chunk) {
-                            tracing::error!("Failed to write audio chunk: {}", e);
-                            self.recording = false;
-                        }
-                }
-            }
+    pub fn start(&mut self) -> Result<()> {
+        if self.stream.is_some() {
+            return Err(anyhow::anyhow!("Recording already in progress"));
         }
+
+        let (audio_tx, audio_rx) = mpsc::channel(100);
+        let stream = AudioCapture::start(self.format, audio_tx)?;
+
+        let (stop_tx, stop_rx) = oneshot::channel();
+        let task_handle = tokio::spawn(recording_task(self.format, audio_rx, stop_rx));
+
+        self.stream = Some(stream);
+        self.task_handle = Some(task_handle);
+        self.stop_tx = Some(stop_tx);
+
+        tracing::info!("Recording started");
+        Ok(())
     }
 
-    async fn handle_command(&mut self, cmd: RecorderCommand) {
-        match cmd {
-            RecorderCommand::Start => {
-                let temp_file = match tempfile::Builder::new()
-                    .prefix("dictator-")
-                    .suffix(".wav")
-                    .tempfile()
-                {
-                    Ok(file) => file,
-                    Err(e) => {
-                        tracing::error!("Failed to create temp file: {}", e);
-                        return;
-                    }
-                };
+    pub async fn stop(&mut self) -> Result<NamedTempFile> {
+        let stream = self
+            .stream
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("No recording in progress"))?;
 
-                let path = temp_file.path().to_path_buf();
+        let stop_tx = self
+            .stop_tx
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("No stop signal sender"))?;
 
-                let sink = match WavSink::new(path, self.format) {
-                    Ok(s) => Box::new(s) as Box<dyn AudioSink + Send>,
-                    Err(e) => {
-                        tracing::error!("Failed to create sink: {}", e);
-                        return;
-                    }
-                };
+        let task_handle = self
+            .task_handle
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("No task handle"))?;
 
-                self.sink = Some(sink);
-                self.temp_file = Some(temp_file);
+        drop(stream);
+        let _ = stop_tx.send(());
 
-                match AudioCapture::start(self.format, self.audio_tx.clone()) {
-                    Ok(stream) => {
-                        self.stream = Some(stream);
-                        self.recording = true;
-                        tracing::info!("Recording started");
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to start capture: {}", e);
-                    }
-                }
-            }
+        let result = task_handle
+            .await
+            .map_err(|e| anyhow::anyhow!("Recording task panicked: {}", e))??;
 
-            RecorderCommand::Stop(reply) => {
-                self.recording = false;
-                self.stream = None;
-
-                let result = if let Some(mut sink) = self.sink.take() {
-                    while let Ok(chunk) = self.audio_rx.try_recv() {
-                        if let Err(e) = sink.write_chunk(chunk) {
-                            tracing::error!("Failed to write audio chunk during drain: {}", e);
-                            break;
-                        }
-                    }
-
-                    // Replace channel to signal bridge task to exit
-                    let (new_audio_tx, new_audio_rx) = mpsc::channel(100);
-                    self.audio_tx = new_audio_tx;
-                    self.audio_rx = new_audio_rx;
-
-                    // Wait for bridge task to exit
-                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-                    match sink.finalize().await {
-                        Ok(()) => self
-                            .temp_file
-                            .take()
-                            .ok_or_else(|| anyhow::anyhow!("Temp file was not created")),
-                        Err(e) => Err(e),
-                    }
-                } else {
-                    Err(anyhow::anyhow!("No active sink to finalize"))
-                };
-
-                let _ = reply.send(result);
-
-                tracing::info!("Recording stopped");
-            }
-        }
+        tracing::info!("Recording stopped");
+        Ok(result)
     }
 }
 
-/// Handle for communicating with the Recorder
-#[derive(Clone)]
-pub struct RecorderHandle {
-    tx: mpsc::Sender<RecorderCommand>,
-}
+async fn recording_task(
+    format: AudioFormat,
+    mut audio_rx: mpsc::Receiver<Vec<f32>>,
+    mut stop_rx: oneshot::Receiver<()>,
+) -> Result<NamedTempFile> {
+    let temp_file = tempfile::Builder::new()
+        .prefix("dictator-")
+        .suffix(".wav")
+        .tempfile()?;
 
-impl RecorderHandle {
-    pub fn new(tx: mpsc::Sender<RecorderCommand>) -> Self {
-        Self { tx }
+    let path = temp_file.path().to_path_buf();
+    let mut sink = WavSink::new(path, format)?;
+
+    loop {
+        tokio::select! {
+            Some(chunk) = audio_rx.recv() => {
+                sink.write_chunk(chunk)?;
+            }
+            _ = &mut stop_rx => {
+                break;
+            }
+        }
     }
 
-    pub async fn start(&self) -> Result<()> {
-        self.tx
-            .send(RecorderCommand::Start)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to send start command: {}", e))
+    while let Ok(chunk) = audio_rx.try_recv() {
+        sink.write_chunk(chunk)?;
     }
 
-    pub async fn stop(&self) -> Result<NamedTempFile> {
-        let (reply, rx) = tokio::sync::oneshot::channel();
-        self.tx
-            .send(RecorderCommand::Stop(reply))
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to send stop command: {}", e))?;
-
-        rx.await
-            .map_err(|e| anyhow::anyhow!("Failed to receive stop response: {}", e))?
-    }
+    sink.finalize().await?;
+    Ok(temp_file)
 }

@@ -2,7 +2,7 @@ use crate::audio::AudioFormat;
 use crate::audio_feedback::{AudioFeedback, FeedbackSoundType};
 use crate::config::Config;
 use crate::messages::AppState;
-use crate::services::{Recorder, RecorderHandle};
+use crate::services::Recorder;
 use crate::text_injection;
 use crate::text_processing::TextProcessor;
 use crate::transcription;
@@ -15,7 +15,7 @@ use tokio::sync::mpsc;
 pub struct App {
     state: AppState,
     config: Config,
-    recorder: RecorderHandle,
+    recorder: Recorder,
     transcription_client: async_openai::Client<async_openai::config::OpenAIConfig>,
     text_processor: TextProcessor,
     audio_feedback: AudioFeedback,
@@ -135,7 +135,7 @@ impl App {
             .await;
 
         tracing::debug!("handle_toggle: calling recorder.start()");
-        self.recorder.start().await?;
+        self.recorder.start()?;
         tracing::debug!("handle_toggle: recorder.start() completed");
 
         Ok(())
@@ -157,17 +157,9 @@ impl App {
         Ok(())
     }
 
-    fn setup_audio_pipeline() -> RecorderHandle {
-        let (audio_tx, audio_rx) = mpsc::channel(100);
-        let format = AudioFormat::default(); // 16kHz, mono
-
-        // Create and spawn Recorder (using spawn_local because it's !Send)
-        let (recorder_tx, recorder_rx) = mpsc::channel(10);
-        let recorder = Recorder::new(format, recorder_rx, audio_rx, audio_tx);
-        let recorder_handle = RecorderHandle::new(recorder_tx);
-        tokio::task::spawn_local(recorder.run());
-
-        recorder_handle
+    fn setup_audio_pipeline() -> Recorder {
+        let format = AudioFormat::default();
+        Recorder::new(format)
     }
 
     fn setup_keyboard_monitoring(shortcut: &str) -> Result<mpsc::Receiver<()>> {
