@@ -20,6 +20,36 @@ pub fn create_client(api_url: &str, api_key: &str) -> Client<OpenAIConfig> {
     Client::with_config(openai_config)
 }
 
+/// Check if the transcription service is available
+pub async fn check_availability(client: &Client<OpenAIConfig>) -> Result<()> {
+    use std::time::Duration;
+    use tokio::time::timeout;
+
+    tracing::info!("Checking transcription service availability...");
+
+    let check = timeout(Duration::from_secs(5), client.models().list()).await;
+
+    match check {
+        Ok(Ok(_)) => {
+            tracing::info!("Transcription service is available");
+            Ok(())
+        }
+        Ok(Err(e)) => {
+            anyhow::bail!(
+                "Transcription service is unreachable or returned an error: {}. \
+                 Please ensure your transcription service is running at the configured API URL.",
+                e
+            )
+        }
+        Err(_) => {
+            anyhow::bail!(
+                "Transcription service check timed out after 5 seconds. \
+                 Please ensure your transcription service is running and accessible."
+            )
+        }
+    }
+}
+
 pub async fn transcribe(
     audio_path: &Path,
     client: &Client<OpenAIConfig>,

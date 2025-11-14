@@ -1,4 +1,4 @@
-use crate::audio::{feedback::FeedbackSoundType, AudioFeedback, AudioFormat, Recorder};
+use crate::audio::{AudioFeedback, AudioFormat, Recorder, feedback::FeedbackSoundType};
 use crate::config::Config;
 use crate::text_injection;
 use crate::text_processing::TextProcessor;
@@ -39,8 +39,11 @@ fn build_audio_feedback(config: &Config) -> AudioFeedback {
 
 impl App {
     pub async fn new(config: Config) -> Result<Self> {
-        let recorder = Self::setup_audio_pipeline();
         let transcription_client = transcription::create_client(&config.api_url, &config.api_key);
+        transcription::check_availability(&transcription_client).await?;
+
+        let recorder = Self::setup_audio_pipeline();
+
         let text_processor = TextProcessor::new(&config.word_overrides);
         let audio_feedback = build_audio_feedback(&config);
         let shortcut_rx = Self::setup_keyboard_monitoring(&config.primary_shortcut)?;
@@ -147,18 +150,27 @@ impl App {
 
     async fn handle_stop_and_process(&mut self) -> Result<()> {
         let temp_file = self.stop_recording_with_feedback().await?;
-        let processed_text = self.transcribe_and_process(temp_file.path()).await?;
 
-        tracing::info!("Injecting text...");
-        text_injection::inject_text(processed_text, &self.config.paste_mode).await?;
+        // Perform transcription and text injection
+        // We capture the result so we can reset state regardless of success/failure
+        let result = async {
+            let processed_text = self.transcribe_and_process(temp_file.path()).await?;
 
-        self.play_feedback_if_enabled(FeedbackSoundType::Complete)
-            .await;
+            tracing::info!("Injecting text...");
+            text_injection::inject_text(processed_text, &self.config.paste_mode).await?;
 
-        tracing::info!("Complete!");
+            self.play_feedback_if_enabled(FeedbackSoundType::Complete)
+                .await;
+
+            tracing::info!("Complete!");
+            Ok(())
+        }
+        .await;
+
+        // Always reset state to Idle, even if transcription or injection failed
         self.state = AppState::Idle;
 
-        Ok(())
+        result
     }
 
     fn setup_audio_pipeline() -> Recorder {
