@@ -100,6 +100,14 @@ All configuration is stored in `~/.config/dictator/config.json`.
 
 - **`primary_shortcut`**: Keyboard shortcut to toggle recording (default: `"SUPER+ALT+D"`)
   - Format: Key names joined with `+` (e.g., `"CTRL+ALT+R"`, `"SUPER+SHIFT+V"`)
+  - Supports 200+ keys including:
+    - **Modifiers**: `SUPER`, `ALT`, `CTRL`, `SHIFT` (also `RSUPER`, `RALT`, `RCTRL`, `RSHIFT` for right-side keys)
+    - **Function keys**: `F1`-`F24`
+    - **Numbers**: `0`-`9`
+    - **Navigation**: `UP`, `DOWN`, `LEFT`, `RIGHT`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`
+    - **Editing**: `ENTER`, `SPACE`, `BACKSPACE`, `TAB`, `ESC`, `DELETE`, `INSERT`
+    - **Media**: `VOLUMEUP`, `VOLUMEDOWN`, `MUTE`, `PLAYPAUSE`, `NEXTSONG`, `PREVIOUSSONG`
+    - **Direct evdev names**: Any key supported by your keyboard (e.g., `"KEY_COMMA"`, `"KEY_KP0"`)
 
 - **`paste_mode`**: How to handle transcribed text (default: `"ctrl_shift"`)
   - `"none"`: Copy to clipboard only, no auto-paste
