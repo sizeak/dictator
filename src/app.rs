@@ -40,18 +40,17 @@ fn build_audio_feedback(config: &Config) -> AudioFeedback {
 impl App {
     pub async fn new(config: Config) -> Result<Self> {
         let transcription_client = transcription::create_client(&config.api_url, &config.api_key);
-        transcription::check_availability(&transcription_client).await?;
+        if let Err(e) = transcription::check_availability(&transcription_client).await {
+            tracing::warn!("Transcription service unavailable at startup: {}", e);
+        }
 
         let recorder = Self::setup_audio_pipeline();
 
         let text_processor = TextProcessor::new(&config.word_overrides);
         let audio_feedback = build_audio_feedback(&config);
-        let shortcut_rx = Self::setup_keyboard_monitoring(&config.primary_shortcut)?;
+        let shortcut_rx = Self::setup_keyboard_monitoring()?;
 
-        tracing::info!(
-            "Ready! Press {} to start/stop recording",
-            config.primary_shortcut
-        );
+        tracing::info!("Ready! Listening for global shortcut.");
 
         Ok(Self {
             state: AppState::Idle,
@@ -178,10 +177,13 @@ impl App {
         Recorder::new(format)
     }
 
-    fn setup_keyboard_monitoring(shortcut: &str) -> Result<mpsc::Receiver<()>> {
+    fn setup_keyboard_monitoring() -> Result<mpsc::Receiver<()>> {
         let (shortcut_tx, shortcut_rx) = mpsc::channel(10);
-        let target_keys = shortcuts::parse_shortcut(shortcut)?;
-        tokio::spawn(shortcuts::monitor_keyboards(target_keys, shortcut_tx));
+        tokio::spawn(async move {
+            if let Err(e) = shortcuts::monitor_shortcut(shortcut_tx).await {
+                tracing::error!("Shortcut monitoring error: {}", e);
+            }
+        });
         Ok(shortcut_rx)
     }
 }

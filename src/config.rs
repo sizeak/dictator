@@ -20,9 +20,6 @@ impl Default for PasteMode {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    #[serde(default = "default_shortcut")]
-    pub primary_shortcut: String,
-
     #[serde(default = "default_api_url")]
     pub api_url: String,
 
@@ -61,10 +58,6 @@ pub struct Config {
 
     #[serde(default = "default_max_retries")]
     pub max_retries: u32,
-}
-
-fn default_shortcut() -> String {
-    "SUPER+ALT+D".to_string()
 }
 
 fn default_api_url() -> String {
@@ -106,7 +99,6 @@ fn default_max_retries() -> u32 {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            primary_shortcut: default_shortcut(),
             api_url: default_api_url(),
             api_key: default_api_key(),
             model: default_model(),

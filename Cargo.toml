@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-evdev = { version = "0.13", features = ["tokio"] }
+ashpd = "0.12"
 futures = "0.3"
 cpal = "0.16"
 ringbuf = "0.4"
