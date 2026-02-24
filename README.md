@@ -5,7 +5,7 @@ A voice transcription daemon for Linux/Wayland that enables system-wide voice-to
 ## Features
 
 - **Remote Transcription**: Uses OpenAI-compatible APIs (OpenAI, Groq, local Whisper servers)
-- **System-wide Hotkey**: Global keyboard shortcut to start/stop recording
+- **System-wide Hotkey**: Global keyboard shortcut via XDG Desktop Portal to start/stop recording
 - **Flexible Text Injection**: Multiple paste modes including clipboard-only, Ctrl+V, Ctrl+Shift+V, and Super+V
 - **Audio Feedback**: Optional sound effects for recording start/stop
 - **Word Overrides**: Custom case-insensitive replacements for commonly misheard words
@@ -15,7 +15,8 @@ A voice transcription daemon for Linux/Wayland that enables system-wide voice-to
 
 ## Requirements
 
-- Linux with Wayland compositor
+- Linux with Wayland compositor supporting [XDG Desktop Portal](https://flatpak.github.io/xdg-desktop-portal/) (GNOME, KDE Plasma, COSMIC, etc.)
+- `xdg-desktop-portal` and a compositor-specific backend (e.g., `xdg-desktop-portal-gnome`, `xdg-desktop-portal-kde`)
 - Rust toolchain (for building)
 - `wl-copy` (for clipboard operations)
 - `ydotool` (for auto-paste modes - not needed if using `paste_mode: "none"`)
@@ -49,7 +50,6 @@ Edit `~/.config/dictator/config.json` with your settings:
   "api_url": "http://localhost:8000/v1",
   "api_key": "your-api-key-here",
   "model": "Systran/faster-distil-whisper-large-v3",
-  "primary_shortcut": "SUPER+ALT+D",
   "paste_mode": "ctrl_shift",
   "audio_feedback": true,
   "language": "en"
@@ -75,7 +75,7 @@ systemctl --user start dictator.service
 dictator
 ```
 
-The daemon will start and listen for the configured keyboard shortcut (default: `SUPER+ALT+D`).
+The daemon will start and register a global shortcut (default: `Logo+Alt+D`) via XDG Desktop Portal. You can reconfigure the binding in your desktop's System Settings > Shortcuts.
 
 ### Using the daemon
 
@@ -97,17 +97,6 @@ All configuration is stored in `~/.config/dictator/config.json`.
   - For OpenAI: `"whisper-1"`
 
 ### Optional Settings
-
-- **`primary_shortcut`**: Keyboard shortcut to toggle recording (default: `"SUPER+ALT+D"`)
-  - Format: Key names joined with `+` (e.g., `"CTRL+ALT+R"`, `"SUPER+SHIFT+V"`)
-  - Supports 200+ keys including:
-    - **Modifiers**: `SUPER`, `ALT`, `CTRL`, `SHIFT` (also `RSUPER`, `RALT`, `RCTRL`, `RSHIFT` for right-side keys)
-    - **Function keys**: `F1`-`F24`
-    - **Numbers**: `0`-`9`
-    - **Navigation**: `UP`, `DOWN`, `LEFT`, `RIGHT`, `HOME`, `END`, `PAGEUP`, `PAGEDOWN`
-    - **Editing**: `ENTER`, `SPACE`, `BACKSPACE`, `TAB`, `ESC`, `DELETE`, `INSERT`
-    - **Media**: `VOLUMEUP`, `VOLUMEDOWN`, `MUTE`, `PLAYPAUSE`, `NEXTSONG`, `PREVIOUSSONG`
-    - **Direct evdev names**: Any key supported by your keyboard (e.g., `"KEY_COMMA"`, `"KEY_KP0"`)
 
 - **`paste_mode`**: How to handle transcribed text (default: `"ctrl_shift"`)
   - `"none"`: Copy to clipboard only, no auto-paste
@@ -207,13 +196,12 @@ The application uses Tokio's async runtime with a LocalSet to handle `!Send` fut
 
 ### Keyboard shortcut not working
 
-Ensure your user has access to input devices:
+The shortcut is registered via XDG Desktop Portal's GlobalShortcuts interface. Ensure:
 
-```bash
-sudo usermod -aG input $USER
-```
-
-Log out and back in for changes to take effect.
+- `xdg-desktop-portal` is installed and running
+- Your compositor's portal backend is installed (e.g., `xdg-desktop-portal-gnome`, `xdg-desktop-portal-kde`)
+- Check if the shortcut was registered: look for "Global shortcut registered" in the logs
+- You can reconfigure the binding in System Settings > Shortcuts
 
 ### Audio not recording
 
