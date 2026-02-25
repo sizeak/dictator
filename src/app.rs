@@ -1,5 +1,6 @@
 use crate::audio::{AudioFeedback, AudioFormat, Recorder, feedback::FeedbackSoundType};
 use crate::config::Config;
+use crate::hooks;
 use crate::text_injection;
 use crate::text_processing::TextProcessor;
 use crate::transcription;
@@ -127,6 +128,8 @@ impl App {
         let temp_file = self.recorder.stop().await?;
         tracing::info!("Recording saved to: {:?}", temp_file.path());
 
+        self.run_hook_if_configured("on_recording_stop", &self.config.on_recording_stop.clone());
+
         self.play_feedback_if_enabled(FeedbackSoundType::Stop).await;
 
         Ok(temp_file)
@@ -143,6 +146,8 @@ impl App {
         tracing::debug!("handle_toggle: calling recorder.start()");
         self.recorder.start()?;
         tracing::debug!("handle_toggle: recorder.start() completed");
+
+        self.run_hook_if_configured("on_recording_start", &self.config.on_recording_start.clone());
 
         Ok(())
     }
@@ -170,6 +175,12 @@ impl App {
         self.state = AppState::Idle;
 
         result
+    }
+
+    fn run_hook_if_configured(&self, label: &str, command: &Option<String>) {
+        if let Some(cmd) = command {
+            hooks::run_hook(label, cmd);
+        }
     }
 
     fn setup_audio_pipeline() -> Recorder {

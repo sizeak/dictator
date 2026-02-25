@@ -1,6 +1,7 @@
 mod app;
 mod audio;
 mod config;
+mod hooks;
 mod shortcuts;
 mod text_injection;
 mod text_processing;

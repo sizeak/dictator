@@ -58,6 +58,12 @@ pub struct Config {
 
     #[serde(default = "default_max_retries")]
     pub max_retries: u32,
+
+    #[serde(default)]
+    pub on_recording_start: Option<String>,
+
+    #[serde(default)]
+    pub on_recording_stop: Option<String>,
 }
 
 fn default_api_url() -> String {
@@ -112,6 +118,8 @@ impl Default for Config {
             complete_sound_path: default_complete_sound(),
             timeout: default_timeout(),
             max_retries: default_max_retries(),
+            on_recording_start: None,
+            on_recording_stop: None,
         }
     }
 }
