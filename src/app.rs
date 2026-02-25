@@ -128,8 +128,6 @@ impl App {
         let temp_file = self.recorder.stop().await?;
         tracing::info!("Recording saved to: {:?}", temp_file.path());
 
-        self.run_hook_if_configured("on_recording_stop", &self.config.on_recording_stop.clone());
-
         self.play_feedback_if_enabled(FeedbackSoundType::Stop).await;
 
         Ok(temp_file)
@@ -173,6 +171,8 @@ impl App {
 
         // Always reset state to Idle, even if transcription or injection failed
         self.state = AppState::Idle;
+
+        self.run_hook_if_configured("on_recording_stop", &self.config.on_recording_stop.clone());
 
         result
     }
