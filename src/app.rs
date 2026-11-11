@@ -2,6 +2,7 @@ use crate::audio::{AudioFeedback, AudioFormat, Recorder, feedback::FeedbackSound
 use crate::cleanup::Cleaner;
 use crate::config::Config;
 use crate::hooks;
+use crate::media;
 use crate::text_injection;
 use crate::text_processing::TextProcessor;
 use crate::transcription;
@@ -27,6 +28,8 @@ pub struct App {
     text_processor: TextProcessor,
     audio_feedback: AudioFeedback,
     shortcut_rx: mpsc::Receiver<()>,
+    /// Media players paused when recording started, to resume when it stops
+    paused_media: Vec<String>,
 }
 
 fn build_audio_feedback(config: &Config) -> AudioFeedback {
@@ -68,6 +71,7 @@ impl App {
             text_processor,
             audio_feedback,
             shortcut_rx,
+            paused_media: Vec::new(),
         })
     }
 
@@ -151,6 +155,7 @@ impl App {
         tracing::info!("Recording saved to: {:?}", temp_file.path());
 
         self.play_feedback_if_enabled(FeedbackSoundType::Stop).await;
+        self.resume_media();
 
         Ok(temp_file)
     }
@@ -160,14 +165,25 @@ impl App {
         tracing::debug!("handle_toggle: changing state to Recording");
         self.state = AppState::Recording;
 
+        if self.config.pause_media {
+            self.paused_media = media::pause_playing().await;
+        }
+
         self.play_feedback_if_enabled(FeedbackSoundType::Start)
             .await;
 
         tracing::debug!("handle_toggle: calling recorder.start()");
-        self.recorder.start()?;
+        if let Err(e) = self.recorder.start() {
+            self.state = AppState::Idle;
+            self.resume_media();
+            return Err(e);
+        }
         tracing::debug!("handle_toggle: recorder.start() completed");
 
-        self.run_hook_if_configured("on_recording_start", &self.config.on_recording_start.clone());
+        self.run_hook_if_configured(
+            "on_recording_start",
+            &self.config.on_recording_start.clone(),
+        );
 
         Ok(())
     }
@@ -197,6 +213,14 @@ impl App {
         self.run_hook_if_configured("on_recording_stop", &self.config.on_recording_stop.clone());
 
         result
+    }
+
+    /// Resume paused media in the background so it doesn't delay transcription
+    fn resume_media(&mut self) {
+        let players = std::mem::take(&mut self.paused_media);
+        if !players.is_empty() {
+            tokio::spawn(async move { media::resume(&players).await });
+        }
     }
 
     fn run_hook_if_configured(&self, label: &str, command: &Option<String>) {

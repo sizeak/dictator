@@ -45,6 +45,10 @@ pub struct Config {
     #[serde(default = "default_voice_commands")]
     pub voice_commands: bool,
 
+    /// Pause playing media (via playerctl) while recording, resuming it afterwards
+    #[serde(default = "default_pause_media")]
+    pub pause_media: bool,
+
     #[serde(default = "default_audio_feedback")]
     pub audio_feedback: bool,
 
@@ -131,6 +135,10 @@ fn default_voice_commands() -> bool {
     true
 }
 
+fn default_pause_media() -> bool {
+    true
+}
+
 fn default_audio_feedback() -> bool {
     true
 }
@@ -166,6 +174,7 @@ impl Default for Config {
             paste_mode: PasteMode::default(),
             word_overrides: HashMap::new(),
             voice_commands: default_voice_commands(),
+            pause_media: default_pause_media(),
             audio_feedback: default_audio_feedback(),
             start_sound_path: default_start_sound(),
             stop_sound_path: default_stop_sound(),

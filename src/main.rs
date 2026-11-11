@@ -3,6 +3,7 @@ mod audio;
 mod cleanup;
 mod config;
 mod hooks;
+mod media;
 mod shortcuts;
 mod text_injection;
 mod text_processing;

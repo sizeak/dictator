@@ -46,8 +46,9 @@ The `Recorder` is `!Send` (holds `cpal::Stream`), which is why `main.rs` uses `t
 - **cleanup.rs**: Optional LLM post-processing of transcripts via an OpenAI-compatible chat completions API (falls back to uncleaned text on failure)
 - **text_processing.rs**: Regex-based voice command expansion (40+ patterns) and word overrides
 - **text_injection.rs**: `wl-copy` for clipboard, `ydotool` for auto-paste (both via `spawn_blocking`)
+- **media.rs**: Pauses playing MPRIS players via `playerctl` when recording starts and resumes them when it stops (best-effort)
 - **config.rs**: JSON config at `~/.config/dictator/config.json`, auto-created with defaults if missing
 
 ### External Tool Dependencies
 
-Runtime: `wl-copy` (clipboard, required), `ydotool` (auto-paste, optional), `xdg-desktop-portal` + compositor backend (shortcuts).
+Runtime: `wl-copy` (clipboard, required), `ydotool` (auto-paste, optional), `playerctl` (pause media while recording, optional), `xdg-desktop-portal` + compositor backend (shortcuts).

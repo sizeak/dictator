@@ -20,6 +20,7 @@ A voice transcription daemon for Linux/Wayland that enables system-wide voice-to
 - Rust toolchain (for building)
 - `wl-copy` (for clipboard operations)
 - `ydotool` (for auto-paste modes - not needed if using `paste_mode: "none"`)
+- `playerctl` (optional, to pause media while recording)
 - Audio input device (microphone)
 - OpenAI-compatible transcription API (local or remote)
 
@@ -130,6 +131,8 @@ All configuration is stored in `~/.config/dictator/config.json`.
   ```
 
 - **`voice_commands`**: Turn spoken commands such as "period" or "new line" into punctuation and symbols (default: `true`). Set to `false` if you speak naturally: with it on, those words are replaced wherever they occur, so "the trial period ends" becomes "the trial . ends"
+
+- **`pause_media`**: Pause any media that is playing while you record, and resume it when you stop (default: `true`). Uses `playerctl`, so it works with any MPRIS player (Spotify, browsers, Plexamp, ...). Players you resume, stop or close yourself mid-recording are left alone. Does nothing if `playerctl` isn't installed
 
 - **`timeout`**: API request timeout in seconds (default: `30`)
 
