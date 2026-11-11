@@ -98,7 +98,7 @@ All configuration is stored in `~/.config/dictator/config.json`.
 
 ### Optional Settings
 
-- **`paste_mode`**: How to handle transcribed text (default: `"ctrl_shift"`)
+- **`paste_mode`**: How to handle transcribed text (default: `"ctrl_shift"`). The text is always copied to both the clipboard and the primary selection, so middle-click also pastes it
   - `"none"`: Copy to clipboard only, no auto-paste
   - `"ctrl"`: Auto-paste using Ctrl+V
   - `"ctrl_shift"`: Auto-paste using Ctrl+Shift+V
@@ -129,13 +129,36 @@ All configuration is stored in `~/.config/dictator/config.json`.
   }
   ```
 
+- **`voice_commands`**: Turn spoken commands such as "period" or "new line" into punctuation and symbols (default: `true`). Set to `false` if you speak naturally: with it on, those words are replaced wherever they occur, so "the trial period ends" becomes "the trial . ends"
+
 - **`timeout`**: API request timeout in seconds (default: `30`)
 
 - **`max_retries`**: Number of retry attempts for failed API requests (default: `2`)
 
+- **`cleanup`**: Optional LLM post-processing of the transcription. After `word_overrides` and voice commands have been applied, the text goes to a model with a system prompt that rewrites it as a Slack message in the speaker's voice: it fixes misheard words, spelling and punctuation, cuts filler, false starts, hedging and repetition, and condenses long rambles while keeping every substantive point. The replacement spellings from `word_overrides` are listed in the prompt as terms to keep exactly, so the model doesn't "correct" them. If cleanup fails, times out, or stops early (e.g. at a token limit), the uncleaned text is used instead.
+
+  The model is reached through an OpenAI-compatible chat completions API. A small local model via [Ollama](https://ollama.com), such as `qwen2.5:3b`, `qwen2.5:1.5b` or `llama3.2:1b`, keeps cleanup fast and private:
+  ```json
+  "cleanup": {
+    "enabled": true,
+    "model": "qwen2.5:3b",
+    "api_url": "http://localhost:11434/v1",
+    "api_key": "ollama"
+  }
+  ```
+
+  Settings:
+  - `enabled`: default `false`
+  - `model`: the model to request (required)
+  - `api_url` / `api_key`: default to the transcription `api_url` / `api_key`; set them to use a different provider (e.g. a local Ollama, or `https://api.openai.com/v1`). If `api_url` points at a different host (scheme, hostname and port) and `api_key` is not set, no key is sent: the transcription key is never sent to a different host
+  - `system_prompt`: instructions sent with every transcription. Leave it out to use the built-in cleanup prompt. The transcript is wrapped in `<transcript>...</transcript>` tags, so a custom prompt should say so
+  - `temperature`: default `0`. Set to `null` to leave it out, which models that reject it (e.g. OpenAI o-series / gpt-5) require
+  - `timeout`: seconds to wait before falling back to the uncleaned text (default: `20`). A local model that has to load from cold may need longer
+  - Reasoning models' `<think>...</think>` blocks are stripped from the response
+
 ## Voice Commands
 
-Dictator supports voice commands for punctuation and symbols. Say the command word to insert the corresponding character:
+Dictator supports voice commands for punctuation and symbols (disable with `"voice_commands": false`). Say the command word to insert the corresponding character:
 
 **Punctuation:**
 - period → `.`
@@ -201,6 +224,7 @@ The shortcut is registered via XDG Desktop Portal's GlobalShortcuts interface. E
 - `xdg-desktop-portal` is installed and running
 - Your compositor's portal backend is installed (e.g., `xdg-desktop-portal-gnome`, `xdg-desktop-portal-kde`)
 - Check if the shortcut was registered: look for "Global shortcut registered" in the logs
+- Dictator writes a hidden `~/.local/share/applications/io.github.sizeak.Dictator.desktop` on startup so the portal can identify it. Without it, KDE refuses with "An app id is required"
 - You can reconfigure the binding in System Settings > Shortcuts
 
 ### Audio not recording

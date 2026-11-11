@@ -1,4 +1,5 @@
 use crate::audio::{AudioFeedback, AudioFormat, Recorder, feedback::FeedbackSoundType};
+use crate::cleanup::Cleaner;
 use crate::config::Config;
 use crate::hooks;
 use crate::text_injection;
@@ -22,6 +23,7 @@ pub struct App {
     config: Config,
     recorder: Recorder,
     transcription_client: async_openai::Client<async_openai::config::OpenAIConfig>,
+    cleaner: Option<Cleaner>,
     text_processor: TextProcessor,
     audio_feedback: AudioFeedback,
     shortcut_rx: mpsc::Receiver<()>,
@@ -47,7 +49,11 @@ impl App {
 
         let recorder = Self::setup_audio_pipeline();
 
-        let text_processor = TextProcessor::new(&config.word_overrides);
+        let cleaner = config
+            .cleanup
+            .enabled
+            .then(|| Cleaner::new(&config, &transcription_client));
+        let text_processor = TextProcessor::new(&config.word_overrides, config.voice_commands);
         let audio_feedback = build_audio_feedback(&config);
         let shortcut_rx = Self::setup_keyboard_monitoring()?;
 
@@ -58,6 +64,7 @@ impl App {
             config,
             recorder,
             transcription_client,
+            cleaner,
             text_processor,
             audio_feedback,
             shortcut_rx,
@@ -114,11 +121,26 @@ impl App {
         .await?;
         tracing::info!("Transcription: {}", text);
 
-        tracing::info!("Processing text...");
         let processed_text = self.text_processor.process(&text);
+        let processed_text = self.clean_if_enabled(processed_text).await;
         tracing::info!("Processed text: {}", processed_text);
+        Ok(processed_text)
+    }
 
-        Ok(processed_text.to_string())
+    /// Run LLM cleanup if enabled, falling back to the given text on failure
+    async fn clean_if_enabled(&self, text: String) -> String {
+        let Some(cleaner) = &self.cleaner else {
+            return text;
+        };
+
+        tracing::info!("Cleaning up transcription...");
+        match cleaner.clean(&text).await {
+            Ok(cleaned) => cleaned,
+            Err(e) => {
+                tracing::warn!("LLM cleanup failed, using uncleaned text: {:#}", e);
+                text
+            }
+        }
     }
 
     async fn stop_recording_with_feedback(&mut self) -> Result<tempfile::NamedTempFile> {
@@ -192,7 +214,7 @@ impl App {
         let (shortcut_tx, shortcut_rx) = mpsc::channel(10);
         tokio::spawn(async move {
             if let Err(e) = shortcuts::monitor_shortcut(shortcut_tx).await {
-                tracing::error!("Shortcut monitoring error: {}", e);
+                tracing::error!("Shortcut monitoring error: {:#}", e);
             }
         });
         Ok(shortcut_rx)

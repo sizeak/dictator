@@ -41,6 +41,10 @@ pub struct Config {
     #[serde(default)]
     pub word_overrides: HashMap<String, String>,
 
+    /// Turn spoken commands ("period", "new line", ...) into punctuation and symbols
+    #[serde(default = "default_voice_commands")]
+    pub voice_commands: bool,
+
     #[serde(default = "default_audio_feedback")]
     pub audio_feedback: bool,
 
@@ -64,6 +68,51 @@ pub struct Config {
 
     #[serde(default)]
     pub on_recording_stop: Option<String>,
+
+    #[serde(default)]
+    pub cleanup: CleanupConfig,
+}
+
+/// Optional LLM post-processing of transcriptions (OpenAI-compatible chat completions)
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CleanupConfig {
+    pub enabled: bool,
+
+    /// Falls back to the transcription `api_url` when unset
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_url: Option<String>,
+
+    /// Falls back to the transcription `api_key` when unset, unless `api_url` points at a
+    /// different host (so the transcription key is never sent elsewhere)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub model: String,
+
+    /// Falls back to the built-in prompt when unset
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+
+    /// `null` omits it from the request (needed for models that reject it, e.g. OpenAI o-series)
+    pub temperature: Option<f32>,
+
+    pub timeout: u64,
+}
+
+impl Default for CleanupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_url: None,
+            api_key: None,
+            model: String::new(),
+            system_prompt: None,
+            temperature: Some(0.0),
+            timeout: 20,
+        }
+    }
 }
 
 fn default_api_url() -> String {
@@ -76,6 +125,10 @@ fn default_api_key() -> String {
 
 fn default_model() -> String {
     "Systran/faster-whisper-base".to_string()
+}
+
+fn default_voice_commands() -> bool {
+    true
 }
 
 fn default_audio_feedback() -> bool {
@@ -112,6 +165,7 @@ impl Default for Config {
             whisper_prompt: None,
             paste_mode: PasteMode::default(),
             word_overrides: HashMap::new(),
+            voice_commands: default_voice_commands(),
             audio_feedback: default_audio_feedback(),
             start_sound_path: default_start_sound(),
             stop_sound_path: default_stop_sound(),
@@ -120,6 +174,7 @@ impl Default for Config {
             max_retries: default_max_retries(),
             on_recording_start: None,
             on_recording_stop: None,
+            cleanup: CleanupConfig::default(),
         }
     }
 }
@@ -190,6 +245,64 @@ impl Config {
             return Err(anyhow::anyhow!("model cannot be empty"));
         }
 
+        if self.cleanup.enabled {
+            if let Some(url) = &self.cleanup.api_url
+                && !url.starts_with("http://")
+                && !url.starts_with("https://")
+            {
+                return Err(anyhow::anyhow!(
+                    "cleanup.api_url must start with http:// or https://"
+                ));
+            }
+
+            if self.cleanup.model.trim().is_empty() {
+                return Err(anyhow::anyhow!(
+                    "cleanup.model must be set when cleanup is enabled"
+                ));
+            }
+
+            if self.cleanup.timeout == 0 {
+                return Err(anyhow::anyhow!("cleanup.timeout must be greater than 0"));
+            }
+        }
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_cleanup() {
+        let cases = [
+            ("{}", true),
+            (r#"{"cleanup": {"enabled": false}}"#, true),
+            (r#"{"cleanup": {"enabled": true, "model": "m"}}"#, true),
+            (r#"{"cleanup": {"enabled": true}}"#, false),
+            (r#"{"cleanup": {"enabled": true, "model": " "}}"#, false),
+            (
+                r#"{"cleanup": {"enabled": true, "model": "m", "timeout": 0}}"#,
+                false,
+            ),
+            (
+                r#"{"cleanup": {"enabled": true, "model": "m", "api_url": ""}}"#,
+                false,
+            ),
+        ];
+        for (json, expect_ok) in cases {
+            let config: Config = serde_json::from_str(json).unwrap();
+            assert_eq!(config.validate().is_ok(), expect_ok, "{}", json);
+        }
+    }
+
+    #[test]
+    fn test_default_cleanup_skips_unset_fields() {
+        let json = serde_json::to_value(Config::default()).unwrap();
+        assert_eq!(
+            json["cleanup"],
+            serde_json::json!({"enabled": false, "temperature": 0.0, "timeout": 20})
+        );
     }
 }

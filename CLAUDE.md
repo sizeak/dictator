@@ -43,6 +43,7 @@ The `Recorder` is `!Send` (holds `cpal::Stream`), which is why `main.rs` uses `t
 - **audio/wav_sink.rs**: Streaming WAV encoding on a dedicated blocking thread
 - **audio/feedback.rs**: Plays OGG sound effects via rodio (`spawn_blocking`)
 - **transcription.rs**: `async_openai` client wrapper
+- **cleanup.rs**: Optional LLM post-processing of transcripts via an OpenAI-compatible chat completions API (falls back to uncleaned text on failure)
 - **text_processing.rs**: Regex-based voice command expansion (40+ patterns) and word overrides
 - **text_injection.rs**: `wl-copy` for clipboard, `ydotool` for auto-paste (both via `spawn_blocking`)
 - **config.rs**: JSON config at `~/.config/dictator/config.json`, auto-created with defaults if missing

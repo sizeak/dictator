@@ -1,5 +1,6 @@
 mod app;
 mod audio;
+mod cleanup;
 mod config;
 mod hooks;
 mod shortcuts;

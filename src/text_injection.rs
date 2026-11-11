@@ -9,7 +9,8 @@ use crate::config::PasteMode;
 /// Inject processed text into the system via clipboard and keyboard simulation
 ///
 /// This function:
-/// - Copies the processed text to clipboard via wl-copy
+/// - Copies the processed text to the clipboard and the primary selection (middle-click
+///   paste) via wl-copy
 /// - Waits for clipboard to settle (if paste_mode is not None)
 /// - Triggers paste via ydotool with the specified keyboard shortcut (unless paste_mode is None)
 pub async fn inject_text(processed_text: String, paste_mode: &PasteMode) -> Result<()> {
@@ -19,20 +20,11 @@ pub async fn inject_text(processed_text: String, paste_mode: &PasteMode) -> Resu
 
     // Use spawn_blocking for external commands
     task::spawn_blocking(move || {
-        // Copy to clipboard via wl-copy
-        let mut child = Command::new("wl-copy")
-            .stdin(Stdio::piped())
-            .spawn()
-            .context("Failed to spawn wl-copy")?;
-
-        child
-            .stdin
-            .as_mut()
-            .context("Failed to get wl-copy stdin")?
-            .write_all(processed_text.as_bytes())
-            .context("Failed to write to wl-copy")?;
-
-        child.wait().context("wl-copy failed")?;
+        wl_copy(&processed_text, false)?;
+        // Not every compositor supports the primary selection, so it's best effort
+        if let Err(e) = wl_copy(&processed_text, true) {
+            tracing::warn!("Failed to copy to primary selection: {:#}", e);
+        }
 
         // Only trigger paste if not in "none" mode
         match paste_mode {
@@ -64,5 +56,28 @@ pub async fn inject_text(processed_text: String, paste_mode: &PasteMode) -> Resu
     .await
     .context("spawn_blocking failed")??;
 
+    Ok(())
+}
+
+/// Copy text to the clipboard, or to the primary selection if `primary` is set
+fn wl_copy(text: &str, primary: bool) -> Result<()> {
+    let mut command = Command::new("wl-copy");
+    if primary {
+        command.arg("--primary");
+    }
+    let mut child = command
+        .stdin(Stdio::piped())
+        .spawn()
+        .context("Failed to spawn wl-copy")?;
+
+    child
+        .stdin
+        .take()
+        .context("Failed to get wl-copy stdin")?
+        .write_all(text.as_bytes())
+        .context("Failed to write to wl-copy")?;
+
+    let status = child.wait().context("wl-copy failed")?;
+    anyhow::ensure!(status.success(), "wl-copy exited with {}", status);
     Ok(())
 }
